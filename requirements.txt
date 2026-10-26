@@ -1,0 +1,9 @@
+pandas
+sqlalchemy
+psycopg2-binary
+faker
+rapidfuzz
+scikit-learn
+joblib
+chromadb
+mlflow==3.16.1

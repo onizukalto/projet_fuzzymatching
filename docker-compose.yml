@@ -1,0 +1,79 @@
+services:
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: er
+      POSTGRES_PASSWORD: er
+      POSTGRES_DB: er
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U er"]
+      interval: 5s
+      retries: 10
+
+  mlflow:
+    image: python:3.12-slim
+    environment:
+      MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE: "true"
+    command: >
+      sh -c "pip install --no-cache-dir mlflow==3.16.1 &&
+             mlflow server --host 0.0.0.0 --port 5000
+             --backend-store-uri sqlite:////mlflow/mlflow.db
+             --artifacts-destination /mlflow/artifacts
+             --disable-security-middleware"
+    ports:
+      - "5001:5000"
+    volumes:
+      - mlflowdata:/mlflow
+
+  airflow:
+    build: .
+    command: standalone
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      # Les variables lues par nos fichiers src/ : les adresses changent dans Docker
+      PG_URL: postgresql+psycopg2://er:er@postgres:5432/er
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      DATA_DIR: /opt/project/data
+      MODEL_PATH: /opt/project/models/model.joblib
+      DIFFICULTY: hard
+      N_ENTITIES: "10000"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/project/src
+      - ./data:/opt/project/data
+      - ./models:/opt/project/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      PG_URL: postgresql+psycopg2://er:er@postgres:5432/er
+      DATA_DIR: /opt/project/data
+      MODEL_PATH: /opt/project/models/model.joblib
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/opt/project/src
+      - ./api:/opt/project/api
+      - ./data:/opt/project/data
+      - ./models:/opt/project/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  mlflowdata:
